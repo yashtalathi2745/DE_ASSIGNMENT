@@ -1,0 +1,40 @@
+# Environment & secrets
+.env
+*.env
+
+# Model files
+*.pkl
+*.pickle
+
+# Data files
+*.csv
+
+# Mage logs
+mage.log
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Distribution / packaging
+*.egg-info/
+dist/
+build/
