@@ -1,33 +1,51 @@
-# Data Engineering: From Git to Gold
+# Data Engineering
 ## Pipeline Orchestration, ELT, MLOps, and Event Streaming
 **Course:** Data Engineering · Sem 7  
-**Student Name:** Yash Talathi 
-**Roll Number:** 23BCS246  
+**Student Name:** Yash Talathi  
+**Roll Number:** 23BCS246
+
+
 **GitHub Repository:** [https://github.com/yashtalathi2745/DE_ASSIGNMENT](https://github.com/yashtalathi2745/DE_ASSIGNMENT)  
 
 ---
 
 # 1. Executive Summary & End-to-End Architecture
 
-Modern enterprise data platforms integrate version control, continuous integration, robust data lakehouse ingestion, continuous machine learning training pipelines, and real-time streaming architectures. 
+Modern enterprise data platforms integrate version control, continuous integration, robust data lakehouse ingestion, continuous machine learning training pipelines, and real-time streaming architectures. This assignment unifies these five core pillars:
 
-| Stage | Part | Pipeline Flow | Key Outcome |
-|---|:---:|---|---|
-| **1. Code & CI/CD** | A | Local Git repo (working → staging → commit) → `git push main` → GitHub Actions CI (`pytest tests/test_prepare_data.py`) | Every push is automatically tested |
-| **2. Real-Time Event Stream** | D | Dispatcher (`rapido-dispatch` topic exchange) → RabbitMQ broker → Ravi (`bangalore.koramangala.*`), Meena (`bangalore.*.food`), Control (`bangalore.#`) and Landing Zone (`write_landing`) | Orders routed by `city.zone.type` key |
-| **3. FreshCart Lakehouse ELT** | B | Raw web/mobile orders → Landing (`.json.gz`) → **Bronze** `orders_raw` → **Silver** `orders_clean` + `quarantine.orders` → `orders_dedup` → `orders_enriched` → **Gold** `fct_orders` | Idempotent business table via `MERGE` on `row_hash` |
-| **4. ML Pipeline with Mage** | C | `load_iris` → `prepare_data` (80/20) → `train_model` (gate ≥ 80%) → `save_results` and, in parallel, `evaluate_model` → `export_metrics` | Model saved only if quality gate passes |
+```mermaid
+flowchart TD
+    subgraph S1["1. Code & CI/CD (Part A)"]
+        GIT["Local Git Repo\n(working -> staging -> commit)"] --> PUSH["git push main"]
+        PUSH --> GHA["GitHub Actions CI\n(pytest tests/test_prepare_data.py)"]
+    end
 
-**Lakehouse layer detail (Part B):**
+    subgraph S2["2. Real-Time Event Stream (Part D)"]
+        DISP["Dispatcher\n(rapido-dispatch topic exchange)"] -->|routing key: city.zone.type| RMQ[("RabbitMQ Broker")]
+        RMQ -->|bangalore.koramangala.*| RAVI["Driver: Ravi"]
+        RMQ -->|bangalore.*.food| MEENA["Driver: Meena"]
+        RMQ -->|bangalore.#| CTRL["Supervisor: Control"]
+        RMQ -.->|stream landing| BATCH["Landing Zone\n(write_landing)"]
+    end
 
-| Step | Transformation | Purpose |
-|:---:|---|---|
-| 1 | `COPY INTO` Bronze | Immutable audit trail of raw data |
-| 2 | `SQL_10` cleaning and quarantine | Reject invalid rows into `quarantine.orders` |
-| 3 | `SQL_20` dedup (`QUALIFY ROW_NUMBER`) | Keep the latest version of each order |
-| 4 | `SQL_40` point-in-time joins | Apply SCD2 customer tier and FX rate |
-| 5 | `MERGE INTO` on `row_hash` | Idempotent load into Gold |
+    subgraph S3["3. FreshCart Lakehouse ELT (Part B)"]
+        APIS["Raw Web / Mobile Orders"] --> LAND["Raw Landing .json.gz"]
+        LAND -->|COPY INTO| BRONZE[("Bronze: orders_raw\n(Immutable Audit Trail)")]
+        BRONZE -->|SQL_10 Cleaning & Quarantine| SILVER_CLEAN[("Silver: orders_clean\n+ quarantine.orders")]
+        SILVER_CLEAN -->|SQL_20 Deduplication\nQUALIFY ROW_NUMBER| SILVER_DEDUP[("Silver: orders_dedup")]
+        SILVER_DEDUP -->|SQL_40 Point-in-time Joins\nSCD2 Customers + FX| ENRICHED[("Silver: orders_enriched")]
+        ENRICHED -->|MERGE INTO row_hash| GOLD[("Gold: fct_orders\n(Idempotent Business Table)")]
+    end
 
+    subgraph S4["4. Orchestrated ML Pipeline with Mage (Part C)"]
+        GOLD -.->|Training Data| ML_LOAD["load_iris\n(Data Loader)"]
+        ML_LOAD --> ML_PREP["prepare_data\n(Transformer 80/20)"]
+        ML_PREP --> ML_TRAIN["train_model\n(Transformer + Quality Gate >= 80%)"]
+        ML_TRAIN -->|Passed Test| ML_SAVE["save_results\n(Data Exporter: iris_predictions.csv)"]
+        ML_TRAIN -->|Parallel Branch| ML_EVAL["evaluate_model\n(Confusion Matrix & Metrics)"]
+        ML_EVAL --> ML_EXP["export_metrics\n(Custom Exporter: iris_metrics.csv)"]
+    end
+```
 
 ---
 
@@ -450,3 +468,56 @@ Re-executing transformation pipeline (Second Run)...
 ```
 The order counts, revenue, and loyalty points remain 100% constant, proving complete pipeline idempotency.
 
+
+---
+
+# APPENDIX: VERIFICATION SCREENSHOTS
+
+## Part A: Git & CI/CD Pipeline (`screenshots/a/`)
+
+### A3. GitHub Actions CI - Passing Run (Green)
+![GitHub Actions Passing Run](screenshots/a/image.png)
+
+### A3. GitHub Actions CI - Intentional Failure Run (Red)
+![GitHub Actions Failing Run](screenshots/a/failedCI.png)
+
+---
+
+## Part B: FreshCart Snowflake ELT Pipeline (`screenshots/b/`)
+
+### B1. Bronze Raw Table Row Count (8 rows)
+![Bronze Raw Table](screenshots/b/bronzeRowCount.png)
+
+### B1. Silver Clean Rows (6 rows)
+![Silver Clean Rows](screenshots/b/silverCleanedRows.png)
+
+### B1. Quarantine Orders (2 rows: ORD-1004, ORD-1006)
+![Quarantine Orders](screenshots/b/quarantine.png)
+
+### B1. Silver Deduplicated Orders (4 rows)
+![Silver Dedup Orders](screenshots/b/silverAfterDidup.png)
+
+### B1. Final Gold Orders Table (`gold.fct_orders`)
+![Gold Final Table](screenshots/b/goldFinalTable.png)
+
+### B1. Final Quality Verification Query
+![B1 Final Verification](screenshots/b/finalCheck.png)
+
+### B3. Unsupported Currency Quarantine Idempotency (ORD-1006)
+![B3 Quarantine Idempotency](screenshots/b/b3_Afterrun.png)
+
+### B4. Customer SCD2 Tier Upgrade & Gold Re-run (Arjun K)
+![B4 Arjun Tier Upgrade](screenshots/b/B4.png)
+
+### B5. Custom Quality Check & Intentional Failure (Future Order Date)
+![B5 Future Date Check](screenshots/b/b5.png)
+
+---
+
+## Part C: Mage ML Pipeline (`screenshots/c/`)
+
+### C1. Iris Classifier Pipeline DAG & Execution
+![C1 Mage DAG Run](screenshots/c/c1.png)
+
+### C3. Parallel Evaluation Branch & Confusion Matrix
+![C3 Mage Evaluation Branch](screenshots/c/c3.png)
